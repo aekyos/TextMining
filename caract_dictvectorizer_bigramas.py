@@ -3,6 +3,7 @@ import os
 import spacy
 from sklearn.feature_extraction import DictVectorizer
 import spacy_spanish_lemmatizer
+from scipy import spatial
 
 DIR = "/home/pc/Documents/textmining/dota/purged_es/"
 
@@ -29,11 +30,11 @@ def maketriplas(doc, stopwords):
   for sent in doc.sents: # divido en oraciones
     sent_list = []
     for token in sent:
-      if valid(word=token, stopwords=stopwords) and frec_threshold(token=token, words_frec=words_frec):         
+      if valid(word=token, stopwords=stopwords) and frec_threshold(token=token, words_frec=words_frec):
         tripla = token.pos_ + "_" + token.dep_ #+ "_" + next_word
         string = token2str(token)
         sent_list.append((string, tripla))
-    
+
     for i in range(len(sent_list)-1):
       bigrama = sent_list[i][0] + "_" + sent_list[i+1][0]
       tripla_bigrama = sent_list[i][1] + "_" + sent_list[i+1][1]
@@ -51,15 +52,7 @@ def maketriplas(doc, stopwords):
 
 vectorizer = DictVectorizer()
 triplas = maketriplas(doc=doc, stopwords=stopwords)
-vocabulary_dictvect, vocab_list = makevocab(corpus=triplas)
+vocabulary_dictvect, vocab_list, word_list = makevocab(corpus=triplas)
 vectors_dictvect = vectorizer.fit_transform(vocab_list)
 
-km_dictvect = run_kmeans(vectors=vectors_dictvect, normalize=True, clusters_number=100)
-show_clusters_bigramas(vocabulary_dictvect, km_dictvect)
-
-# print(vocabulary_dictvect)
-
-# plot(vectors=vectors_dictvect, vocabulary=vocabulary_dictvect)
-
-# average_metrica(n=1, vectors=vectors_dictvect, normalize=False, clusters_number=n_clusters, vocab=vocabulary_dictvect)
-# average_metrica(n=5, vectors=vectors_dictvect, normalize=True, clusters_number=n_clusters, vocab=vocabulary_dictvect)
+print(expandir_desescaladores(vocabulary=vocabulary_dictvect, vectors=vectors_dictvect, word_list=word_list))

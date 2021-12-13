@@ -2,6 +2,7 @@ from sklearn.decomposition import PCA as sklearnPCA
 from sklearn.cluster import KMeans
 from sklearn import preprocessing
 from collections import Counter
+from scipy import spatial
 
 import spacy_spanish_lemmatizer
 import matplotlib.pyplot as plt
@@ -12,13 +13,13 @@ import re
 n_clusters = 40
 
 desescaladores = ["tranquilo",
-                  "callate", "calla", "callar", "callarse", #"calladito" ??
-                  "terminenla", "terminala", #"terminen", "termina"
-                  "muteado", "muteen", "muteo", #"mute", "muteame" ??
+                  "callate", "calla", "callar",
+                  "terminenla", "terminala",
+                  "muteado", "muteen",
                  ]
 
-insultos = {"cagada", "puta", "noob", "mierda", "asco", "verga", "peruano", 
-            "puto", "perra", "negro", "virgen", "basura", "ctmre", "mono", 
+insultos = {"cagada", "puta", "noob", "mierda", "asco", "verga", "peruano",
+            "puto", "perra", "negro", "virgen", "basura", "ctmre", "mono",
             "rata", "concha", "chucha"}
 
 toxics = {"troll", "report", "caca", "gg", "afk", "feed", "fedea", "lloron",
@@ -32,7 +33,6 @@ def nlp_process(corpus):
   nlp.add_pipe("sentencizer")
   nlp.replace_pipe("lemmatizer", "spanish_lemmatizer")
   nlp.max_length = 2000000
-  # corpus = corpus[:300000]
   doc = nlp(corpus, disable = ['ner', 'parser'])
   stopwords = nlp.Defaults.stop_words
 
@@ -63,7 +63,7 @@ def get_messages_with_time(DIR, files):
       file.close()
 
       for l in range(len(content)):
-          parsed = content[l].split(",", maxsplit=3)#[-1][:-1] + ". "
+          parsed = content[l].split(",", maxsplit=3)
           time = "TIME" + parsed[1] + " "
           msg = parsed[-1][:-1] + ". "
           parrafo += time + msg
@@ -247,14 +247,16 @@ def words_frecuency(doc, stopwords):
 def makevocab(corpus):
     corpus_index = {}
     corpus_list = []
+    word_list = []
 
     count = 0
     for string in corpus:
         corpus_index[string] = count
         corpus_list.append(corpus[string])
+        word_list.append(string)
         count += 1
 
-    return corpus_index, corpus_list
+    return corpus_index, corpus_list, word_list
 
 
 def plot(vectors, vocabulary):
@@ -285,3 +287,83 @@ def plot(vectors, vocabulary):
     # plt.savefig("results.png")
 
     return plotted_points
+
+
+def custom_max(array):
+    index = 0
+    value = array[0]
+    N = len(array)
+
+    for i in range(N):
+        v = array[i]
+        if v > value:
+            value = v
+            index = i
+
+    return index, value
+
+
+def get_closest_words(desescalador, vectors, vocabulary_dict, n_closest_words, word_list):
+    vectors_size = len(vectors.toarray())
+    word_index = vocabulary_dict[desescalador]
+    v1 = vectors[word_index].toarray()
+    results = []
+    cantidad_dist_cero = 0 # cantidad de vectores a distancia 0
+    indices = []
+    for i in range(vectors_size):
+        v2 = vectors[i].toarray()
+        result = spatial.distance.cosine(v1, v2) # distancia coseno
+        if len(results) > n_closest_words:
+            max_index, max_dist = custom_max(results)
+            if result < max_dist:
+                results[max_index] = result
+                indices[max_index] = i
+                if result == 0:
+                    cantidad_dist_cero += 1
+        else:
+            indices.append(i)
+            results.append(result)
+            if result == 0:
+                cantidad_dist_cero += 1
+
+        if cantidad_dist_cero == n_closest_words:
+            break
+
+    closest_words = []
+    for i in indices:
+        closest_words.append(word_list[i])
+    return closest_words
+
+
+def expandir_palabras(desescalador, vocabulary, vectors, word_list):
+    expansion = set()
+    for bigrama in vocabulary:
+        if desescalador in bigrama:
+            res = get_closest_words(desescalador=bigrama, vectors=vectors, vocabulary_dict=vocabulary, n_closest_words=3, word_list=word_list)
+            for bigrama_expansion in res:
+                word1, word2 = bigrama_expansion.split("_", 1)
+                expansion.add(word1)
+                expansion.add(word2)
+
+    return expansion
+
+
+def expandir_desescaladores(vocabulary, vectors, word_list):
+    frec = {}
+    for desescalador in desescaladores:
+        expandidas = expandir_palabras(desescalador=desescalador, vocabulary=vocabulary, vectors=vectors, word_list=word_list)
+
+        print(desescalador, expandidas, "\n\n")
+
+        for word in expandidas:
+            if word in frec:
+                frec[word] += 1
+            else:
+                frec[word] = 1
+
+    expanded = []
+    for w in frec:
+        if frec[w] >= 5:
+            expanded.append(w)
+
+    return expanded
